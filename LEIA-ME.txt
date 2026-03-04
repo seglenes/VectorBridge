@@ -1,0 +1,43 @@
+Vector Bridge v2.1: Estrutura Perfeita e Live Text
+Concluímos a Fase 2 e os polimentos da Fase 3! O projeto agora é uma Interface Gráfica real (ScriptUI Panels) com suporte avançado para extração paramétrica mantendo Z-Index, Posição Absoluta e Textos Editáveis.
+
+Duas ferramentas núcleo foram consolidadas:
+
+VectorBridge_AI.jsx
+ - Motor e Interface do Illustrator
+VectorBridge_AE.jsx
+ - Motor e Interface do After Effects
+Novidades da V2.1
+1. Interface em Tempo Real
+Em vez de ir em File > Scripts o tempo todo, agora você tem Painéis nativos nos dois softwares.
+
+2. Live Text Support
+Se a sua seleção no Illustrator tiver um objeto de Texto, o After Effects construirá uma Text Layer real (injetando a fonte, cor, parágrafo e conteúdo), permitindo editar o texto e usar os Animators nativos do AE.
+
+3. Split Layers Inteligentes (Grupos Estruturais)
+Ao importar no AE, o script respeita o agrupamento do Illustrator.
+
+Se você tiver 5 estrelas soltas no AI, o AE criará 5 Shape Layers independentes.
+Se você agrupou elas num Group, o AE criará apenas 1 Shape Layer contendo as 5 propriedades internamente na raiz.
+4. Z-Index de Camadas Invertidas
+O After Effects constrói e exibe propriedades de baixo para cima (diferente da interface de cima-baixo do Illustrator). O motor V2.1 inverte a leitura recursiva automaticamente, garantindo que objetos que estão no fundo cobrindo outros no AI continuem exatamente com a mesma profundidade de visualização (Overlay) nas propriedades do AE.
+
+5. Posição Relativa e Absoluta
+O VectorBridge agora mapeia não o centro de um documento infinito, e sim a âncora do Active Artboard do Illustrator, transferindo-o para a origem da sua Composição do AE. Elementos alinhados aos cantos no AI nascerão nos MESMOS cantos no AE, mesmo que a camada do AE sofra Split.
+
+6. Compound Paths (Pathfinder / Vazados)
+Elementos mesclados ou "furados" pelo Pathfinder do AI têm sua propriedade resgatada. O AE replica o comportamento de Clipping/Hole acionando um Merge Paths automático na propriedade raiz do grupo.
+
+Como Usar no Dia-a-Dia
+No Illustrator:
+Vá em File > Scripts > Other Script... e escolha 
+VectorBridge_AI.jsx
+. (A janela vai ficar flutuando).
+Desenhe vetores normais, grupos e textos. Selecione tudo.
+Clique no botão Push to AE 📤.
+No After Effects:
+Vá em File > Scripts > Run Script File... e rode 
+VectorBridge_AE.jsx
+. (Você pode "dockar" ele arrastando a barra para as abas nativas do AE).
+Com a sua Composição aberta, clique em 📥 Pull from AI.
+Assista as Shapes Layers isoladas e os Text Layers nascerem prontos para a animação!

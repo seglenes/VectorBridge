@@ -1,0 +1,14 @@
+# Mac OS
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Logs and temp files
+*.log
+*.tmp
+*.bak
+
+# Adobe temp files
+*.*~
