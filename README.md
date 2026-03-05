@@ -5,8 +5,11 @@ Vector Bridge is a script toolset for seamlessly transferring vector graphics fr
 ## Features (v2.1)
 - **Nested Groups**: Accurately imports Illustrator group structures as nested groups within an After Effects Shape Layer.
 - **Accurate Positioning**: Maps Illustrator document coordinates to After Effects composition coordinates, keeping the visual layout intact.
-- **Text & Font Handling**: Correctly handles text scaling and font settings during import.
 - **Complex Paths**: Robust support for compound paths and masked objects.
+
+## Known Limitations
+- **Text Layers**: Text layers will import, but they currently default to Times New Roman in After Effects. Preserving exact font styling is a work in progress for future versions.
+- **Gradients**: Gradients are not fully supported yet.
 
 ## Usage
 1. Open your artwork in Adobe Illustrator.
@@ -14,7 +17,7 @@ Vector Bridge is a script toolset for seamlessly transferring vector graphics fr
 3. Open Adobe After Effects.
 4. Run `VectorBridge_AE.jsx` to build the shapes from the exported data.
 
-*(For detailed instructions and notes on current limitations like Gradients, see `LEIA-ME.txt` or future updates).*
+*(For detailed instructions and notes, see `LEIA-ME.txt`).*
 
 ## License
 Provided "as is" or per the standard terms associated with your usage.
