@@ -61,10 +61,10 @@
 
                 var exportData = {
                     shapes: [],
-                    docBounds: { 
+                    docBounds: {
                         left: abRect[0], top: abRect[1], right: abRect[2], bottom: abRect[3],
-                        width: Math.abs(abRect[2] - abRect[0]), 
-                        height: Math.abs(abRect[3] - abRect[1]) 
+                        width: Math.abs(abRect[2] - abRect[0]),
+                        height: Math.abs(abRect[3] - abRect[1])
                     }
                 };
 
@@ -166,8 +166,18 @@
 
                 // AI Selection is ordered top-to-bottom. AE renders bottom-to-top.
                 for (var i = selection.length - 1; i >= 0; i--) {
-                    var node = processItem(selection[i]);
-                    if (node) exportData.shapes.push(node);
+                    var selItem = selection[i];
+                    var node = processItem(selItem);
+                    if (node) {
+                        try {
+                            if (selItem.geometricBounds) {
+                                var b = selItem.geometricBounds;
+                                node.cx = (b[0] + b[2]) / 2;
+                                node.cy = (b[1] + b[3]) / 2;
+                            }
+                        } catch (e) { }
+                        exportData.shapes.push(node);
+                    }
                 }
                 if (exportData.shapes.length === 0) return "Error: Found no valid paths/text.";
 

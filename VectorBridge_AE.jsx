@@ -69,7 +69,7 @@
             var aiCenterX = docLeft + docW / 2;
             var aiCenterY = docTop - docH / 2;
 
-            function buildPath(shapeData, parentGroup, skipAppearance) {
+            function buildPath(shapeData, parentGroup, skipAppearance, refX, refY) {
                 var pathGroup = parentGroup.addProperty("ADBE Vector Group");
                 pathGroup.name = shapeData.name || "Path";
                 var pathGroupContents = pathGroup.property("ADBE Vectors Group");
@@ -80,8 +80,8 @@
                 var vertices = [], inTangents = [], outTangents = [];
                 for (var v = 0; v < shapeData.vertices.length; v++) {
                     var pt = shapeData.vertices[v];
-                    var vx = pt[0] - aiCenterX;
-                    var vy = aiCenterY - pt[1]; // Invert Y, relative to center
+                    var vx = pt[0] - refX;
+                    var vy = refY - pt[1]; // Invert Y, relative to reference center
                     vertices.push([vx, vy]);
                     inTangents.push(shapeData.inTangents && shapeData.inTangents.length > v ? [shapeData.inTangents[v][0], -shapeData.inTangents[v][1]] : [0, 0]);
                     outTangents.push(shapeData.outTangents && shapeData.outTangents.length > v ? [shapeData.outTangents[v][0], -shapeData.outTangents[v][1]] : [0, 0]);
@@ -105,7 +105,10 @@
                 }
             }
 
-            function traverseNode(nodeData, parentLayerOrGroup) {
+            function traverseNode(nodeData, parentLayerOrGroup, refX, refY) {
+                var currentRefX = (nodeData.cx !== undefined) ? nodeData.cx : (refX !== undefined ? refX : aiCenterX);
+                var currentRefY = (nodeData.cy !== undefined) ? nodeData.cy : (refY !== undefined ? refY : aiCenterY);
+
                 if (nodeData.type === "text") {
                     var textLayer = comp.layers.addText(nodeData.contents);
                     textLayer.name = nodeData.name;
@@ -129,7 +132,9 @@
                     if (!parentLayerOrGroup) {
                         var shapeLayer = comp.layers.addShape();
                         shapeLayer.name = nodeData.name;
-                        shapeLayer.property("Position").setValue([cW / 2, cH / 2]);
+                        var absPosX = (cW / 2) + (currentRefX - aiCenterX);
+                        var absPosY = (cH / 2) + (aiCenterY - currentRefY);
+                        shapeLayer.property("Position").setValue([absPosX, absPosY]);
                         contents = shapeLayer.property("ADBE Root Vectors Group");
                     } else {
                         var localGroup = parentLayerOrGroup.addProperty("ADBE Vector Group");
@@ -140,7 +145,7 @@
                     for (var c = nodeData.children.length - 1; c >= 0; c--) {
                         var child = nodeData.children[c];
                         if (child.type === "path") {
-                            buildPath(child, contents);
+                            buildPath(child, contents, false, currentRefX, currentRefY);
                         } else if (child.type === "compound") {
                             var compoundGroup = contents.addProperty("ADBE Vector Group");
                             compoundGroup.name = child.name;
@@ -154,7 +159,7 @@
                                     if (!firstFill && child.children[cp].fill) firstFill = child.children[cp].fill;
                                     if (!firstStroke && child.children[cp].stroke) firstStroke = child.children[cp].stroke;
 
-                                    buildPath(child.children[cp], compoundContents, true);
+                                    buildPath(child.children[cp], compoundContents, true, currentRefX, currentRefY);
                                 }
                             }
                             compoundContents.addProperty("ADBE Vector Filter - Merge");
@@ -170,7 +175,7 @@
                                 fillProp.property("ADBE Vector Fill Color").setValue(firstFill);
                             }
                         } else {
-                            traverseNode(child, contents);
+                            traverseNode(child, contents, currentRefX, currentRefY);
                         }
                     }
                 }
@@ -180,7 +185,9 @@
                     if (!parentLayerOrGroup) {
                         var shapeLayer = comp.layers.addShape();
                         shapeLayer.name = nodeData.name;
-                        shapeLayer.property("Position").setValue([cW / 2, cH / 2]);
+                        var absPosX = (cW / 2) + (currentRefX - aiCenterX);
+                        var absPosY = (cH / 2) + (aiCenterY - currentRefY);
+                        shapeLayer.property("Position").setValue([absPosX, absPosY]);
                         contents = shapeLayer.property("ADBE Root Vectors Group");
                     } else {
                         var cGroup = parentLayerOrGroup.addProperty("ADBE Vector Group");
@@ -194,7 +201,7 @@
                         if (nodeData.children[cp].type === "path") {
                             if (!firstFill && nodeData.children[cp].fill) firstFill = nodeData.children[cp].fill;
                             if (!firstStroke && nodeData.children[cp].stroke) firstStroke = nodeData.children[cp].stroke;
-                            buildPath(nodeData.children[cp], contents, true);
+                            buildPath(nodeData.children[cp], contents, true, currentRefX, currentRefY);
                         }
                     }
                     contents.addProperty("ADBE Vector Filter - Merge");
@@ -212,10 +219,12 @@
                     if (!parentLayerOrGroup) {
                         var shapeLayer = comp.layers.addShape();
                         shapeLayer.name = nodeData.name;
-                        shapeLayer.property("Position").setValue([cW / 2, cH / 2]);
-                        buildPath(nodeData, shapeLayer.property("ADBE Root Vectors Group"));
+                        var absPosX = (cW / 2) + (currentRefX - aiCenterX);
+                        var absPosY = (cH / 2) + (aiCenterY - currentRefY);
+                        shapeLayer.property("Position").setValue([absPosX, absPosY]);
+                        buildPath(nodeData, shapeLayer.property("ADBE Root Vectors Group"), false, currentRefX, currentRefY);
                     } else {
-                        buildPath(nodeData, parentLayerOrGroup);
+                        buildPath(nodeData, parentLayerOrGroup, false, currentRefX, currentRefY);
                     }
                 }
             }
