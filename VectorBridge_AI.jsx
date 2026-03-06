@@ -124,12 +124,23 @@
                     return [0, 0, 0];
                 }
 
-                function processItem(item) {
+                function processItem(item, fallbackName) {
+                    var safeName = "";
+                    if (item.name) {
+                        safeName = item.name;
+                    } else if (item.layer && item.layer.name) {
+                        safeName = item.layer.name;
+                    } else if (fallbackName) {
+                        safeName = fallbackName;
+                    }
+
                     if (item.typename === "PathItem") {
-                        return extractPathData(item);
+                        var pathData = extractPathData(item);
+                        pathData.name = safeName || "Path";
+                        return pathData;
                     } else if (item.typename === "TextFrame") {
                         var textData = {
-                            type: "text", name: item.name || "Text Layer", contents: item.contents,
+                            type: "text", name: safeName || "Text Layer", contents: item.contents,
                             position: [item.position[0], -item.position[1]], fontFamily: "Arial", fontSize: 12, fillColor: [1, 1, 1], justification: 0
                         };
                         if (item.textRange && item.textRange.characterAttributes) {
@@ -146,17 +157,16 @@
                         }
                         return textData;
                     } else if (item.typename === "CompoundPathItem") {
-                        var compoundObj = { type: "compound", name: item.name || "Compound Path", children: [] };
-                        // AI layer order: index 0 is top. We process bottom-up for AE (index length-1 down to 0)
+                        var compoundObj = { type: "compound", name: safeName || "Compound Path", children: [] };
                         for (var j = item.pathItems.length - 1; j >= 0; j--) {
-                            var child = processItem(item.pathItems[j]);
+                            var child = processItem(item.pathItems[j], safeName);
                             if (child) compoundObj.children.push(child);
                         }
                         return compoundObj;
                     } else if (item.typename === "GroupItem") {
-                        var groupObj = { type: "group", name: item.name || "Group", children: [] };
+                        var groupObj = { type: "group", name: safeName || "Group", children: [] };
                         for (var g = item.pageItems.length - 1; g >= 0; g--) {
-                            var child = processItem(item.pageItems[g]);
+                            var child = processItem(item.pageItems[g], safeName);
                             if (child) groupObj.children.push(child);
                         }
                         return groupObj;
