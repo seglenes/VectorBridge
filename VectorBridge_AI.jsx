@@ -16,6 +16,11 @@
         var title = win.add("statictext", undefined, "Push selected paths/text to AE:");
         title.alignment = "center";
 
+        var grpOptions = win.add("group");
+        grpOptions.add("statictext", undefined, "Mode:");
+        var ddlMode = grpOptions.add("dropdownlist", undefined, ["Standard (Static)", "Selection as Sequence", "Canvas (Layer Sequences)"]);
+        ddlMode.selection = 0;
+
         var btnExport = win.add("button", [0, 0, 150, 40], "Push to AE 📤");
         var statusText = win.add("statictext", undefined, "Ready.");
         statusText.alignment = "center";
@@ -28,7 +33,8 @@
             // Executing the logic in the main Illustrator thread so 'app' and 'activeDocument' are properly scoped.
             var bt = new BridgeTalk();
             bt.target = "illustrator";
-            bt.body = "var exportFunction = " + mainLogic.toString() + "; exportFunction();";
+            // Pass the selected mode index to the function
+            bt.body = "var exportFunction = " + mainLogic.toString() + "; exportFunction(" + ddlMode.selection.index + ");";
 
             bt.onResult = function (resultMsg) {
                 statusText.text = resultMsg.body;
@@ -43,17 +49,19 @@
         };
 
         // --- CORE LOGIC (Executed via BridgeTalk) ---
-        function mainLogic() {
+        function mainLogic(modeIndex) {
             try {
                 if (app.documents.length === 0) {
                     return "Error: No Document Open.";
                 }
 
                 var doc = app.activeDocument;
-                var selection = doc.selection;
 
-                if (!selection || selection.length === 0) {
-                    return "Error: Select something first.";
+                // If mode is Standard (0) or Selection as Sequence (1), selection is required.
+                if (modeIndex === 0 || modeIndex === 1) {
+                    if (!doc.selection || doc.selection.length === 0) {
+                        return "Error: Select something first.";
+                    }
                 }
 
                 var abIdx = doc.artboards.getActiveArtboardIndex();
@@ -174,22 +182,113 @@
                     return null;
                 }
 
-                // AI Selection is ordered top-to-bottom. AE renders bottom-to-top.
-                for (var i = selection.length - 1; i >= 0; i--) {
-                    var selItem = selection[i];
-                    var node = processItem(selItem);
-                    if (node) {
-                        try {
-                            if (selItem.geometricBounds) {
+                function gatherPaths(container) {
+                    var paths = [];
+                    for (var i = 0; i < container.pageItems.length; i++) {
+                        var item = container.pageItems[i];
+                        if (item.hidden || item.locked) continue;
+                        if (item.typename === "PathItem") {
+                            paths.push(item);
+                        } else if (item.typename === "GroupItem") {
+                            paths = paths.concat(gatherPaths(item));
+                        }
+                    }
+                    return paths;
+                }
+
+                if (modeIndex === 0) {
+                    // 0: Standard (Static)
+                    var selection = doc.selection;
+                    // AI Selection is ordered top-to-bottom. AE renders bottom-to-top.
+                    for (var i = selection.length - 1; i >= 0; i--) {
+                        var selItem = selection[i];
+                        var node = processItem(selItem);
+                        if (node) {
+                            try {
+                                if (selItem.geometricBounds) {
+                                    var b = selItem.geometricBounds;
+                                    node.cx = (b[0] + b[2]) / 2;
+                                    node.cy = (b[1] + b[3]) / 2;
+                                }
+                            } catch (e) { }
+                            exportData.shapes.push(node);
+                        }
+                    }
+                } else if (modeIndex === 1) {
+                    // 1: Selection as Sequence
+                    var selection = doc.selection;
+                    var frames = [];
+                    var firstFill = null, firstStroke = null;
+                    var cx = 0, cy = 0;
+
+                    for (var i = selection.length - 1; i >= 0; i--) {
+                        var selItem = selection[i];
+                        if (selItem.typename === "PathItem") {
+                            var pData = extractPathData(selItem);
+                            if (!firstFill && pData.fill) firstFill = pData.fill;
+                            if (!firstStroke && pData.stroke) firstStroke = pData.stroke;
+                            frames.push({ vertices: pData.vertices, inTangents: pData.inTangents, outTangents: pData.outTangents, closed: pData.closed });
+
+                            if (frames.length === 1 && selItem.geometricBounds) {
                                 var b = selItem.geometricBounds;
-                                node.cx = (b[0] + b[2]) / 2;
-                                node.cy = (b[1] + b[3]) / 2;
+                                cx = (b[0] + b[2]) / 2;
+                                cy = (b[1] + b[3]) / 2;
                             }
-                        } catch (e) { }
-                        exportData.shapes.push(node);
+                        }
+                    }
+
+                    if (frames.length > 0) {
+                        exportData.shapes.push({
+                            type: "path_sequence",
+                            name: "AnimSequence",
+                            frames: frames,
+                            fill: firstFill,
+                            stroke: firstStroke,
+                            cx: cx,
+                            cy: cy
+                        });
+                    }
+                } else if (modeIndex === 2) {
+                    // 2: Canvas (Layer Sequences)
+                    // Iterate from bottom layer to top layer
+                    for (var i = doc.layers.length - 1; i >= 0; i--) {
+                        var layer = doc.layers[i];
+                        if (!layer.visible || layer.locked) continue;
+
+                        var frames = [];
+                        var firstFill = null, firstStroke = null;
+                        var cx = 0, cy = 0;
+
+                        var paths = gatherPaths(layer);
+                        // internal pageItems are also top-to-bottom, so go backwards to get bottom-to-top frames
+                        for (var r = paths.length - 1; r >= 0; r--) {
+                            var pData = extractPathData(paths[r]);
+                            if (!firstFill && pData.fill) firstFill = pData.fill;
+                            if (!firstStroke && pData.stroke) firstStroke = pData.stroke;
+                            frames.push({ vertices: pData.vertices, inTangents: pData.inTangents, outTangents: pData.outTangents, closed: pData.closed });
+
+                            if (frames.length === 1 && paths[r].geometricBounds) {
+                                var b = paths[r].geometricBounds;
+                                cx = (b[0] + b[2]) / 2;
+                                cy = (b[1] + b[3]) / 2;
+                            }
+                        }
+
+                        if (frames.length > 0) {
+                            exportData.shapes.push({
+                                type: "path_sequence",
+                                name: layer.name,
+                                frames: frames,
+                                fill: firstFill,
+                                stroke: firstStroke,
+                                cx: cx,
+                                cy: cy
+                            });
+                        }
                     }
                 }
-                if (exportData.shapes.length === 0) return "Error: Found no valid paths/text.";
+
+                if (exportData.shapes.length === 0) return "Error: Found no valid paths/text for export.";
 
                 function stringify(obj) {
                     var t = typeof (obj);

@@ -215,6 +215,63 @@
                         fProp.property("ADBE Vector Fill Color").setValue(firstFill);
                     }
                 }
+                else if (nodeData.type === "path_sequence") {
+                    var contents;
+                    if (!parentLayerOrGroup) {
+                        var shapeLayer = comp.layers.addShape();
+                        shapeLayer.name = nodeData.name;
+                        var absPosX = (cW / 2) + (currentRefX - aiCenterX);
+                        var absPosY = (cH / 2) + (aiCenterY - currentRefY);
+                        shapeLayer.property("Position").setValue([absPosX, absPosY]);
+                        contents = shapeLayer.property("ADBE Root Vectors Group");
+                    } else {
+                        var cGroup = parentLayerOrGroup.addProperty("ADBE Vector Group");
+                        cGroup.name = nodeData.name;
+                        contents = cGroup.property("ADBE Vectors Group");
+                    }
+
+                    var pathGroup = contents.addProperty("ADBE Vector Group");
+                    pathGroup.name = nodeData.name;
+                    var pathGroupContents = pathGroup.property("ADBE Vectors Group");
+                    var pathProperty = pathGroupContents.addProperty("ADBE Vector Shape - Group");
+                    var adbeShapeProp = pathProperty.property("ADBE Vector Shape");
+
+                    var keyTime = comp.time;
+                    var frameSpacing = comp.frameDuration * 10;
+
+                    for (var f = 0; f < nodeData.frames.length; f++) {
+                        var frameData = nodeData.frames[f];
+                        var shape = new Shape();
+                        var vertices = [], inTangents = [], outTangents = [];
+
+                        for (var v = 0; v < frameData.vertices.length; v++) {
+                            var pt = frameData.vertices[v];
+                            var vx = pt[0] - currentRefX;
+                            var vy = currentRefY - pt[1];
+                            vertices.push([vx, vy]);
+                            inTangents.push(frameData.inTangents && frameData.inTangents.length > v ? [frameData.inTangents[v][0], -frameData.inTangents[v][1]] : [0, 0]);
+                            outTangents.push(frameData.outTangents && frameData.outTangents.length > v ? [frameData.outTangents[v][0], -frameData.outTangents[v][1]] : [0, 0]);
+                        }
+
+                        shape.vertices = vertices;
+                        shape.inTangents = inTangents;
+                        shape.outTangents = outTangents;
+                        shape.closed = frameData.closed;
+
+                        adbeShapeProp.setValueAtTime(keyTime, shape);
+                        keyTime += frameSpacing;
+                    }
+
+                    if (nodeData.stroke) {
+                        var sProp = pathGroupContents.addProperty("ADBE Vector Graphic - Stroke");
+                        sProp.property("ADBE Vector Stroke Color").setValue(nodeData.stroke.color);
+                        sProp.property("ADBE Vector Stroke Width").setValue(nodeData.stroke.width);
+                    }
+                    if (nodeData.fill) {
+                        var fProp = pathGroupContents.addProperty("ADBE Vector Graphic - Fill");
+                        fProp.property("ADBE Vector Fill Color").setValue(nodeData.fill);
+                    }
+                }
                 else if (nodeData.type === "path") {
                     if (!parentLayerOrGroup) {
                         var shapeLayer = comp.layers.addShape();
