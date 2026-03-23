@@ -1,4 +1,5 @@
 // VectorBridge_AE.jsx
+// Version: 2.2
 // Floating ScriptUI Panel for After Effects
 
 (function (thisObj) {

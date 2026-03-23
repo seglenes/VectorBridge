@@ -1,4 +1,5 @@
 // VectorBridge_AI.jsx
+// Version: 2.2
 // Floating ScriptUI Panel for Illustrator
 
 #target illustrator

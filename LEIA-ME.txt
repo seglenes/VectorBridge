@@ -1,4 +1,4 @@
-Vector Bridge v2.1: Estrutura Perfeita e Live Text
+Vector Bridge v2.2: Estrutura Perfeita, Live Text e Animação de Sequências
 Concluímos a Fase 2 e os polimentos da Fase 3! O projeto agora é uma Interface Gráfica real (ScriptUI Panels) com suporte avançado para extração paramétrica mantendo Z-Index, Posição Absoluta e Textos Editáveis.
 
 Duas ferramentas núcleo foram consolidadas:
@@ -7,7 +7,7 @@ VectorBridge_AI.jsx
  - Motor e Interface do Illustrator
 VectorBridge_AE.jsx
  - Motor e Interface do After Effects
-Novidades da V2.1
+Novidades da V2.2
 1. Interface em Tempo Real
 Em vez de ir em File > Scripts o tempo todo, agora você tem Painéis nativos nos dois softwares.
 
@@ -20,7 +20,7 @@ Ao importar no AE, o script respeita o agrupamento do Illustrator.
 Se você tiver 5 estrelas soltas no AI, o AE criará 5 Shape Layers independentes.
 Se você agrupou elas num Group, o AE criará apenas 1 Shape Layer contendo as 5 propriedades internamente na raiz.
 4. Z-Index de Camadas Invertidas
-O After Effects constrói e exibe propriedades de baixo para cima (diferente da interface de cima-baixo do Illustrator). O motor V2.1 inverte a leitura recursiva automaticamente, garantindo que objetos que estão no fundo cobrindo outros no AI continuem exatamente com a mesma profundidade de visualização (Overlay) nas propriedades do AE.
+O After Effects constrói e exibe propriedades de baixo para cima (diferente da interface de cima-baixo do Illustrator). O motor V2.2 inverte a leitura recursiva automaticamente, garantindo que objetos que estão no fundo cobrindo outros no AI continuem exatamente com a mesma profundidade de visualização (Overlay) nas propriedades do AE.
 
 5. Posição Relativa e Absoluta
 O VectorBridge agora mapeia não o centro de um documento infinito, e sim a âncora do Active Artboard do Illustrator, transferindo-o para a origem da sua Composição do AE. Elementos alinhados aos cantos no AI nascerão nos MESMOS cantos no AE, mesmo que a camada do AE sofra Split.
