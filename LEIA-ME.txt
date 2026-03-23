@@ -28,6 +28,9 @@ O VectorBridge agora mapeia não o centro de um documento infinito, e sim a ânc
 6. Compound Paths (Pathfinder / Vazados)
 Elementos mesclados ou "furados" pelo Pathfinder do AI têm sua propriedade resgatada. O AE replica o comportamento de Clipping/Hole acionando um Merge Paths automático na propriedade raiz do grupo.
 
+7. Animação de Sequências (Frame-by-Frame)
+O Vector Bridge agora suporta exportar arte como sequências animadas através do menu "Mode". Você pode selecionar objetos e exportá-los como sequências de paths ("Selection as Sequence"), ou exportar todas as camadas do Canvas do Illustrator como frames sequenciais ("Canvas (Layer Sequences)") para animação tradicional.
+
 Como Usar no Dia-a-Dia
 No Illustrator:
 Vá em File > Scripts > Other Script... e escolha 
