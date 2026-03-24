@@ -19,8 +19,13 @@
 
         var grpOptions = win.add("group");
         grpOptions.add("statictext", undefined, "Mode:");
-        var ddlMode = grpOptions.add("dropdownlist", undefined, ["Standard (Static)", "Selection as Sequence", "Canvas (Layer Sequences)"]);
-        ddlMode.selection = 0;
+        var ddlMode = grpOptions.add("dropdownlist", undefined, [
+            "Selection -> Separate Layers", 
+            "Selection -> Group by AI Layer", 
+            "Selection -> As Sequence", 
+            "All Layers -> As Sequences"
+        ]);
+        ddlMode.selection = 1;
 
         var btnExport = win.add("button", [0, 0, 150, 40], "Push to AE 📤");
         var statusText = win.add("statictext", undefined, "Ready.");
@@ -58,8 +63,8 @@
 
                 var doc = app.activeDocument;
 
-                // If mode is Standard (0) or Selection as Sequence (1), selection is required.
-                if (modeIndex === 0 || modeIndex === 1) {
+                // If mode is 0, 1, or 2, selection is required.
+                if (modeIndex >= 0 && modeIndex <= 2) {
                     if (!doc.selection || doc.selection.length === 0) {
                         return "Error: Select something first.";
                     }
@@ -89,15 +94,7 @@
                         stroke: null
                     };
 
-                    function parseColor(aiColor) {
-                        if (aiColor.typename === "RGBColor") return [aiColor.red / 255, aiColor.green / 255, aiColor.blue / 255];
-                        if (aiColor.typename === "CMYKColor") {
-                            var c = aiColor.cyan / 100, m = aiColor.magenta / 100, y = aiColor.yellow / 100, k = aiColor.black / 100;
-                            return [1 - Math.min(1, c * (1 - k) + k), 1 - Math.min(1, m * (1 - k) + k), 1 - Math.min(1, y * (1 - k) + k)];
-                        }
-                        if (aiColor.typename === "GrayColor") return [1 - (aiColor.gray / 100), 1 - (aiColor.gray / 100), 1 - (aiColor.gray / 100)];
-                        return [0, 0, 0];
-                    }
+
 
                     if (pathItem.filled && pathItem.fillColor) shapeData.fill = parseColor(pathItem.fillColor);
                     if (pathItem.stroked && pathItem.strokeColor) {
@@ -124,6 +121,15 @@
                         return [1 - Math.min(1, c * (1 - k) + k), 1 - Math.min(1, m * (1 - k) + k), 1 - Math.min(1, y * (1 - k) + k)];
                     }
                     if (aiColor.typename === "GrayColor") return [1 - (aiColor.gray / 100), 1 - (aiColor.gray / 100), 1 - (aiColor.gray / 100)];
+                    if (aiColor.typename === "SpotColor") {
+                        var baseColor = parseColor(aiColor.spot.color);
+                        var tint = (aiColor.tint !== undefined) ? aiColor.tint / 100 : 1;
+                        return [
+                            1 - (1 - baseColor[0]) * tint,
+                            1 - (1 - baseColor[1]) * tint,
+                            1 - (1 - baseColor[2]) * tint
+                        ];
+                    }
                     if (aiColor.typename === "GradientColor") {
                         // Temp fallback for gradients -> grab the first gradient color stop
                         try {
@@ -198,9 +204,8 @@
                 }
 
                 if (modeIndex === 0) {
-                    // 0: Standard (Static)
+                    // 0: Selection -> Separate Layers
                     var selection = doc.selection;
-                    // AI Selection is ordered top-to-bottom. AE renders bottom-to-top.
                     for (var i = selection.length - 1; i >= 0; i--) {
                         var selItem = selection[i];
                         var node = processItem(selItem);
@@ -216,7 +221,39 @@
                         }
                     }
                 } else if (modeIndex === 1) {
-                    // 1: Selection as Sequence
+                    // 1: Selection -> Group by AI Layer
+                    var selection = doc.selection;
+                    var groupsByLayer = {};
+                    var orderedLayerNames = [];
+
+                    for (var i = selection.length - 1; i >= 0; i--) {
+                        var selItem = selection[i];
+                        var node = processItem(selItem);
+                        if (node) {
+                            var layName = (selItem.layer && selItem.layer.name) ? selItem.layer.name : "Layer";
+                            
+                            if (!groupsByLayer[layName]) {
+                                groupsByLayer[layName] = { type: "group", name: layName, children: [] };
+                                orderedLayerNames.push(layName);
+                            }
+                            
+                            try {
+                                if (selItem.geometricBounds) {
+                                    var b = selItem.geometricBounds;
+                                    node.cx = (b[0] + b[2]) / 2;
+                                    node.cy = (b[1] + b[3]) / 2;
+                                }
+                            } catch (e) { }
+                            
+                            groupsByLayer[layName].children.push(node);
+                        }
+                    }
+
+                    for (var k = 0; k < orderedLayerNames.length; k++) {
+                        exportData.shapes.push(groupsByLayer[orderedLayerNames[k]]);
+                    }
+                } else if (modeIndex === 2) {
+                    // 2: Selection as Sequence
                     var selection = doc.selection;
                     var frames = [];
                     var firstFill = null, firstStroke = null;
@@ -249,8 +286,8 @@
                             cy: cy
                         });
                     }
-                } else if (modeIndex === 2) {
-                    // 2: Canvas (Layer Sequences)
+                } else if (modeIndex === 3) {
+                    // 3: Canvas (Layer Sequences)
                     // Iterate from bottom layer to top layer
                     for (var i = doc.layers.length - 1; i >= 0; i--) {
                         var layer = doc.layers[i];
