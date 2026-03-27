@@ -110,6 +110,47 @@
                             shapeData.outTangents.push([pt.rightDirection[0] - anchor[0], pt.rightDirection[1] - anchor[1]]);
                         }
                     }
+
+                    // Parametric shape detection
+                    try {
+                        if (pathItem.pathPoints && pathItem.pathPoints.length === 4) {
+                            var b = pathItem.geometricBounds;
+                            var w = Math.abs(b[2] - b[0]);
+                            var h = Math.abs(b[3] - b[1]);
+                            var cx = (b[0] + b[2]) / 2;
+                            var cy = (b[1] + b[3]) / 2;
+
+                            var isRect = true;
+                            var isEllipse = true;
+
+                            for (var i = 0; i < 4; i++) {
+                                var pt = pathItem.pathPoints[i];
+                                
+                                // Rectangle Analysis
+                                if (Math.abs(pt.anchor[0] - pt.leftDirection[0]) > 0.5 || Math.abs(pt.anchor[1] - pt.leftDirection[1]) > 0.5) isRect = false;
+                                var onEdgeX = Math.abs(pt.anchor[0] - b[0]) < 1 || Math.abs(pt.anchor[0] - b[2]) < 1;
+                                var onEdgeY = Math.abs(pt.anchor[1] - b[1]) < 1 || Math.abs(pt.anchor[1] - b[3]) < 1;
+                                if (!onEdgeX || !onEdgeY) isRect = false;
+
+                                // Ellipse Analysis
+                                var onCenterX = Math.abs(pt.anchor[0] - cx) < 1;
+                                var onCenterY = Math.abs(pt.anchor[1] - cy) < 1;
+                                if (!onCenterX && !onCenterY) isEllipse = false;
+                                if (Math.abs(pt.anchor[0] - pt.leftDirection[0]) < 0.5 && Math.abs(pt.anchor[1] - pt.leftDirection[1]) < 0.5) isEllipse = false;
+                            }
+
+                            if (isRect) {
+                                shapeData.type = "rect";
+                                shapeData.size = [w, h];
+                                shapeData.position = [cx, cy];
+                            } else if (isEllipse) {
+                                shapeData.type = "ellipse";
+                                shapeData.size = [w, h];
+                                shapeData.position = [cx, cy];
+                            }
+                        }
+                    } catch (e) {}
+
                     return shapeData;
                 }
 
@@ -185,6 +226,39 @@
                             if (child) groupObj.children.push(child);
                         }
                         return groupObj;
+                    } else if (item.typename === "PluginItem") {
+                        try {
+                            var originalSelection = app.activeDocument.selection;
+                            app.activeDocument.selection = null;
+                            var dup = item.duplicate();
+                            dup.selected = true;
+                            app.executeMenuCommand("expandStyle");
+                            var expanded = app.activeDocument.selection;
+                            
+                            var pluginObj = { type: "group", name: safeName || "Live Shape", children: [] };
+                            if (expanded && expanded.length > 0) {
+                                for (var e = 0; e < expanded.length; e++) {
+                                    var childNode = processItem(expanded[e], safeName);
+                                    if (childNode) pluginObj.children.push(childNode);
+                                }
+                                for (var e = expanded.length - 1; e >= 0; e--) expanded[e].remove();
+                            } else if (dup && dup.typename) {
+                                var childNode = processItem(dup, safeName);
+                                if (childNode) pluginObj.children.push(childNode);
+                                dup.remove();
+                            }
+                            
+                            app.activeDocument.selection = originalSelection;
+                            
+                            if (pluginObj.children.length === 1) {
+                                var singleChild = pluginObj.children[0];
+                                singleChild.name = pluginObj.name;
+                                return singleChild;
+                            }
+                            return pluginObj;
+                        } catch (e) {
+                            return null;
+                        }
                     }
                     return null;
                 }
@@ -261,16 +335,26 @@
 
                     for (var i = selection.length - 1; i >= 0; i--) {
                         var selItem = selection[i];
-                        if (selItem.typename === "PathItem") {
-                            var pData = extractPathData(selItem);
-                            if (!firstFill && pData.fill) firstFill = pData.fill;
-                            if (!firstStroke && pData.stroke) firstStroke = pData.stroke;
-                            frames.push({ vertices: pData.vertices, inTangents: pData.inTangents, outTangents: pData.outTangents, closed: pData.closed });
+                        if (selItem.typename === "PathItem" || selItem.typename === "GroupItem") {
+                            var framePaths = [];
+                            if (selItem.typename === "PathItem") framePaths.push(selItem);
+                            else framePaths = gatherPaths(selItem);
 
-                            if (frames.length === 1 && selItem.geometricBounds) {
-                                var b = selItem.geometricBounds;
-                                cx = (b[0] + b[2]) / 2;
-                                cy = (b[1] + b[3]) / 2;
+                            var extracted = [];
+                            for (var r = framePaths.length - 1; r >= 0; r--) {
+                                var pData = extractPathData(framePaths[r]);
+                                if (!firstFill && pData.fill) firstFill = pData.fill;
+                                if (!firstStroke && pData.stroke) firstStroke = pData.stroke;
+                                extracted.push({ vertices: pData.vertices, inTangents: pData.inTangents, outTangents: pData.outTangents, closed: pData.closed });
+                            }
+
+                            if (extracted.length > 0) {
+                                frames.push(extracted);
+                                if (frames.length === 1 && selItem.geometricBounds) {
+                                    var b = selItem.geometricBounds;
+                                    cx = (b[0] + b[2]) / 2;
+                                    cy = (b[1] + b[3]) / 2;
+                                }
                             }
                         }
                     }
@@ -297,18 +381,31 @@
                         var firstFill = null, firstStroke = null;
                         var cx = 0, cy = 0;
 
-                        var paths = gatherPaths(layer);
-                        // internal pageItems are also top-to-bottom, so go backwards to get bottom-to-top frames
-                        for (var r = paths.length - 1; r >= 0; r--) {
-                            var pData = extractPathData(paths[r]);
-                            if (!firstFill && pData.fill) firstFill = pData.fill;
-                            if (!firstStroke && pData.stroke) firstStroke = pData.stroke;
-                            frames.push({ vertices: pData.vertices, inTangents: pData.inTangents, outTangents: pData.outTangents, closed: pData.closed });
+                        for (var j = layer.pageItems.length - 1; j >= 0; j--) {
+                            var rootItem = layer.pageItems[j];
+                            if (rootItem.hidden || rootItem.locked) continue;
+                            
+                            if (rootItem.typename === "PathItem" || rootItem.typename === "GroupItem") {
+                                var framePaths = [];
+                                if (rootItem.typename === "PathItem") framePaths.push(rootItem);
+                                else framePaths = gatherPaths(rootItem);
 
-                            if (frames.length === 1 && paths[r].geometricBounds) {
-                                var b = paths[r].geometricBounds;
-                                cx = (b[0] + b[2]) / 2;
-                                cy = (b[1] + b[3]) / 2;
+                                var extracted = [];
+                                for (var r = framePaths.length - 1; r >= 0; r--) {
+                                    var pData = extractPathData(framePaths[r]);
+                                    if (!firstFill && pData.fill) firstFill = pData.fill;
+                                    if (!firstStroke && pData.stroke) firstStroke = pData.stroke;
+                                    extracted.push({ vertices: pData.vertices, inTangents: pData.inTangents, outTangents: pData.outTangents, closed: pData.closed });
+                                }
+
+                                if (extracted.length > 0) {
+                                    frames.push(extracted);
+                                    if (frames.length === 1 && rootItem.geometricBounds) {
+                                        var b = rootItem.geometricBounds;
+                                        cx = (b[0] + b[2]) / 2;
+                                        cy = (b[1] + b[3]) / 2;
+                                    }
+                                }
                             }
                         }
 
