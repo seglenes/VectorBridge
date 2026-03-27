@@ -1,4 +1,4 @@
-Vector Bridge v2.2: Estrutura Perfeita, Live Text e Animação de Sequências
+Vector Bridge v2.3: Estrutura Perfeita, Formas Paramétricas e Sequências Multi-Path
 Concluímos a Fase 2 e os polimentos da Fase 3! O projeto agora é uma Interface Gráfica real (ScriptUI Panels) com suporte avançado para extração paramétrica mantendo Z-Index, Posição Absoluta e Textos Editáveis.
 
 Duas ferramentas núcleo foram consolidadas:
@@ -7,7 +7,7 @@ VectorBridge_AI.jsx
  - Motor e Interface do Illustrator
 VectorBridge_AE.jsx
  - Motor e Interface do After Effects
-Novidades da V2.2
+Novidades da V2.3
 1. Interface em Tempo Real
 Em vez de ir em File > Scripts o tempo todo, agora você tem Painéis nativos nos dois softwares.
 
@@ -28,8 +28,14 @@ O VectorBridge agora mapeia não o centro de um documento infinito, e sim a ânc
 6. Compound Paths (Pathfinder / Vazados)
 Elementos mesclados ou "furados" pelo Pathfinder do AI têm sua propriedade resgatada. O AE replica o comportamento de Clipping/Hole acionando um Merge Paths automático na propriedade raiz do grupo.
 
-7. Animação de Sequências (Frame-by-Frame)
-O Vector Bridge agora suporta exportar arte como sequências animadas através do menu "Mode". Você pode selecionar objetos e exportá-los como sequências de paths ("Selection as Sequence"), ou exportar todas as camadas do Canvas do Illustrator como frames sequenciais ("Canvas (Layer Sequences)") para animação tradicional.
+7. Animação de Sequências Multi-Path
+O Vector Bridge suporta exportar grupos de arte independentes como sequências animadas ("Selection as Sequence" ou "Canvas as Sequence"). Você pode exportar arranjos complexos com múltiplos objetos e o script calculará os frames sincronizando todas as propriedades no After Effects.
+
+8. Formas Paramétricas e Live Shapes
+O motor quebra os Live Shapes nativos do Adobe invisivelmente e realiza uma auditoria matemática precisa. Se reconhecer Rectangles (Retângulos) e Ellipses (Círculos) puros, ele recria a forma nativamente no AE, dando a você controle absoluto de Roundness e Dimensões paramétricas.
+
+9. Suporte a Spot Colors (Cores Especiais)
+Problemas com cores processadas ou amostras globais da sua biblioteca ficaram no passado. O sistema captura cores especiais (Spot) e tintas derivadas, convertendo os valores exatamente para equivalentes de RGB puros prontos para a Composição.
 
 Como Usar no Dia-a-Dia
 No Illustrator:

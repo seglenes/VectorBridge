@@ -2,7 +2,10 @@
 
 Vector Bridge is a script toolset for seamlessly transferring vector graphics from Adobe Illustrator to Adobe After Effects. It precisely preserves layer structures (including nested groups converted to Shape Layer groups), Z-ordering, and positioning, mapping correctly to standard 1080p compositions.
 
-## Features (v2.2)
+## Features (v2.3)
+- **Parametric Shapes**: Illustrator Live Rectangles and Ellipses are automatically processed and translated to true After Effects Parametric shapes (Rectangle/Ellipse Path), restoring native control over size and corner roundness.
+- **Multi-Path Sequences**: Animate complex grouped paths simultaneously across animation frames seamlessly, without losing layers or structures.
+- **Spot Color Support**: Detects and flawlessly converts Illustrator Spot Colors and tint values into proper RGB color counterparts.
 - **Live Text Support**: Converts Illustrator text elements into editable After Effects Text Layers, preserving font face, size, color, and justification.
 - **Animation Sequences**: Export Illustrator selections or whole layers as frame-by-frame animated path sequences in After Effects.
 - **Nested Groups**: Accurately imports Illustrator group structures as nested groups within an After Effects Shape Layer.
