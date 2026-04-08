@@ -57,7 +57,21 @@
                 return;
             }
 
+            var currentTime = new Date().getTime();
+            if (importedData.timestamp) {
+                var ageInMinutes = (currentTime - importedData.timestamp) / 1000 / 60;
+                if (ageInMinutes > 5) {
+                    var confirmOld = confirm("The data from Illustrator is over " + Math.round(ageInMinutes) + " minutes old. The AI export might have failed.\n\nContinue trying to import anyway?");
+                    if (!confirmOld) {
+                        statusText.text = "Import cancelled.";
+                        return;
+                    }
+                }
+            }
+
             app.beginUndoGroup("Import from Vector Bridge");
+
+            var targetLayer = (comp.selectedLayers.length > 0) ? comp.selectedLayers[0] : null;
 
             var docW = importedData.docBounds.width;
             var docH = importedData.docBounds.height;
@@ -136,6 +150,7 @@
 
                 if (nodeData.type === "text") {
                     var textLayer = comp.layers.addText(nodeData.contents);
+                    if (targetLayer) textLayer.moveBefore(targetLayer);
                     textLayer.name = nodeData.name;
                     var textProp = textLayer.property("Source Text");
                     var textDocument = textProp.value;
@@ -156,6 +171,7 @@
                     var contents;
                     if (!parentLayerOrGroup) {
                         var shapeLayer = comp.layers.addShape();
+                        if (targetLayer) shapeLayer.moveBefore(targetLayer);
                         shapeLayer.name = nodeData.name;
                         var absPosX = (cW / 2) + (currentRefX - aiCenterX);
                         var absPosY = (cH / 2) + (aiCenterY - currentRefY);
@@ -209,6 +225,7 @@
                     var contents;
                     if (!parentLayerOrGroup) {
                         var shapeLayer = comp.layers.addShape();
+                        if (targetLayer) shapeLayer.moveBefore(targetLayer);
                         shapeLayer.name = nodeData.name;
                         var absPosX = (cW / 2) + (currentRefX - aiCenterX);
                         var absPosY = (cH / 2) + (aiCenterY - currentRefY);
@@ -244,6 +261,7 @@
                     var contents;
                     if (!parentLayerOrGroup) {
                         var shapeLayer = comp.layers.addShape();
+                        if (targetLayer) shapeLayer.moveBefore(targetLayer);
                         shapeLayer.name = nodeData.name;
                         var absPosX = (cW / 2) + (currentRefX - aiCenterX);
                         var absPosY = (cH / 2) + (aiCenterY - currentRefY);
@@ -258,7 +276,7 @@
                     var pathGroup = contents.addProperty("ADBE Vector Group");
                     pathGroup.name = nodeData.name;
                     var pathGroupContents = pathGroup.property("ADBE Vectors Group");
-                    
+
                     try {
                         var maxPaths = 0;
                         for (var f = 0; f < nodeData.frames.length; f++) {
@@ -273,49 +291,49 @@
                         var keyTime = comp.time;
                         var frameSpacing = comp.frameDuration * 2; // Animate on twos
 
-                    for (var f = 0; f < nodeData.frames.length; f++) {
-                        var framePaths = nodeData.frames[f];
-                        
-                        for (var p = 0; p < maxPaths; p++) {
-                            var shape = new Shape();
-                            if (p < framePaths.length) {
-                                var frameData = framePaths[p];
-                                var vertices = [], inTangents = [], outTangents = [];
+                        for (var f = 0; f < nodeData.frames.length; f++) {
+                            var framePaths = nodeData.frames[f];
 
-                                for (var v = 0; v < frameData.vertices.length; v++) {
-                                    var pt = frameData.vertices[v];
-                                    var vx = pt[0] - currentRefX;
-                                    var vy = currentRefY - pt[1];
-                                    vertices.push([vx, vy]);
-                                    inTangents.push(frameData.inTangents && frameData.inTangents.length > v ? [frameData.inTangents[v][0], -frameData.inTangents[v][1]] : [0, 0]);
-                                    outTangents.push(frameData.outTangents && frameData.outTangents.length > v ? [frameData.outTangents[v][0], -frameData.outTangents[v][1]] : [0, 0]);
+                            for (var p = 0; p < maxPaths; p++) {
+                                var shape = new Shape();
+                                if (p < framePaths.length) {
+                                    var frameData = framePaths[p];
+                                    var vertices = [], inTangents = [], outTangents = [];
+
+                                    for (var v = 0; v < frameData.vertices.length; v++) {
+                                        var pt = frameData.vertices[v];
+                                        var vx = pt[0] - currentRefX;
+                                        var vy = currentRefY - pt[1];
+                                        vertices.push([vx, vy]);
+                                        inTangents.push(frameData.inTangents && frameData.inTangents.length > v ? [frameData.inTangents[v][0], -frameData.inTangents[v][1]] : [0, 0]);
+                                        outTangents.push(frameData.outTangents && frameData.outTangents.length > v ? [frameData.outTangents[v][0], -frameData.outTangents[v][1]] : [0, 0]);
+                                    }
+
+                                    if (vertices.length === 0) {
+                                        vertices = [[0, 0], [0.1, 0.1]];
+                                        inTangents = [[0, 0], [0, 0]];
+                                        outTangents = [[0, 0], [0, 0]];
+                                    } else if (vertices.length === 1) {
+                                        vertices.push([vertices[0][0] + 0.1, vertices[0][1] + 0.1]);
+                                        inTangents.push([0, 0]);
+                                        outTangents.push([0, 0]);
+                                    }
+
+                                    shape.vertices = vertices;
+                                    shape.inTangents = inTangents;
+                                    shape.outTangents = outTangents;
+                                    shape.closed = frameData.closed;
+                                } else {
+                                    shape.vertices = [[0, 0], [0.1, 0.1]];
+                                    shape.inTangents = [[0, 0], [0, 0]];
+                                    shape.outTangents = [[0, 0], [0, 0]];
+                                    shape.closed = false;
                                 }
 
-                                if (vertices.length === 0) {
-                                    vertices = [[0, 0], [0.1, 0.1]];
-                                    inTangents = [[0, 0], [0, 0]];
-                                    outTangents = [[0, 0], [0, 0]];
-                                } else if (vertices.length === 1) {
-                                    vertices.push([vertices[0][0] + 0.1, vertices[0][1] + 0.1]);
-                                    inTangents.push([0, 0]);
-                                    outTangents.push([0, 0]);
-                                }
-
-                                shape.vertices = vertices;
-                                shape.inTangents = inTangents;
-                                shape.outTangents = outTangents;
-                                shape.closed = frameData.closed;
-                            } else {
-                                shape.vertices = [[0, 0], [0.1, 0.1]];
-                                shape.inTangents = [[0, 0], [0, 0]];
-                                shape.outTangents = [[0, 0], [0, 0]];
-                                shape.closed = false;
+                                pathGroupContents.property(p + 1).property("ADBE Vector Shape").setValueAtTime(keyTime, shape);
                             }
-                            
-                            pathGroupContents.property(p + 1).property("ADBE Vector Shape").setValueAtTime(keyTime, shape);
-                        }
-                        
-                        keyTime += frameSpacing;
+
+                            keyTime += frameSpacing;
                         }
 
                         if (nodeData.stroke) {
@@ -329,7 +347,7 @@
                         }
                         if (!nodeData.stroke && !nodeData.fill) {
                             var sProp = pathGroupContents.addProperty("ADBE Vector Graphic - Stroke");
-                            sProp.property("ADBE Vector Stroke Color").setValue([0.9, 0.1, 0.1]); 
+                            sProp.property("ADBE Vector Stroke Color").setValue([0.9, 0.1, 0.1]);
                             sProp.property("ADBE Vector Stroke Width").setValue(3);
                         }
                     } catch (err) {
@@ -339,6 +357,7 @@
                 else if (nodeData.type === "path" || nodeData.type === "rect" || nodeData.type === "ellipse") {
                     if (!parentLayerOrGroup) {
                         var shapeLayer = comp.layers.addShape();
+                        if (targetLayer) shapeLayer.moveBefore(targetLayer);
                         shapeLayer.name = nodeData.name;
                         var absPosX = (cW / 2) + (currentRefX - aiCenterX);
                         var absPosY = (cH / 2) + (aiCenterY - currentRefY);

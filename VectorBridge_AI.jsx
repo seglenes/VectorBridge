@@ -74,6 +74,7 @@
                 var abRect = doc.artboards[abIdx].artboardRect; // [left, top, right, bottom]
 
                 var exportData = {
+                    timestamp: new Date().getTime(),
                     shapes: [],
                     docBounds: {
                         left: abRect[0], top: abRect[1], right: abRect[2], bottom: abRect[3],
@@ -180,7 +181,10 @@
                     return [0, 0, 0];
                 }
 
-                function processItem(item, fallbackName) {
+                function processItem(item, fallbackName, depth) {
+                    if (depth === undefined) depth = 0;
+                    if (depth > 5) return null; // Prevent infinite loop for un-expandable PluginItems
+                    
                     var safeName = "";
                     if (item.name) {
                         safeName = item.name;
@@ -215,14 +219,14 @@
                     } else if (item.typename === "CompoundPathItem") {
                         var compoundObj = { type: "compound", name: safeName || "Compound Path", children: [] };
                         for (var j = item.pathItems.length - 1; j >= 0; j--) {
-                            var child = processItem(item.pathItems[j], safeName);
+                            var child = processItem(item.pathItems[j], safeName, depth + 1);
                             if (child) compoundObj.children.push(child);
                         }
                         return compoundObj;
                     } else if (item.typename === "GroupItem") {
                         var groupObj = { type: "group", name: safeName || "Group", children: [] };
                         for (var g = item.pageItems.length - 1; g >= 0; g--) {
-                            var child = processItem(item.pageItems[g], safeName);
+                            var child = processItem(item.pageItems[g], safeName, depth + 1);
                             if (child) groupObj.children.push(child);
                         }
                         return groupObj;
@@ -238,12 +242,12 @@
                             var pluginObj = { type: "group", name: safeName || "Live Shape", children: [] };
                             if (expanded && expanded.length > 0) {
                                 for (var e = 0; e < expanded.length; e++) {
-                                    var childNode = processItem(expanded[e], safeName);
+                                    var childNode = processItem(expanded[e], safeName, depth + 1);
                                     if (childNode) pluginObj.children.push(childNode);
                                 }
                                 for (var e = expanded.length - 1; e >= 0; e--) expanded[e].remove();
                             } else if (dup && dup.typename) {
-                                var childNode = processItem(dup, safeName);
+                                var childNode = processItem(dup, safeName, depth + 1);
                                 if (childNode) pluginObj.children.push(childNode);
                                 dup.remove();
                             }
@@ -270,6 +274,10 @@
                         if (item.hidden || item.locked) continue;
                         if (item.typename === "PathItem") {
                             paths.push(item);
+                        } else if (item.typename === "CompoundPathItem") {
+                            for (var j = 0; j < item.pathItems.length; j++) {
+                                paths.push(item.pathItems[j]);
+                            }
                         } else if (item.typename === "GroupItem") {
                             paths = paths.concat(gatherPaths(item));
                         }
