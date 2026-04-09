@@ -186,12 +186,17 @@
                     if (depth > 5) return null; // Prevent infinite loop for un-expandable PluginItems
                     
                     var safeName = "";
-                    if (item.name) {
+                    if (item.name && item.name !== "") {
                         safeName = item.name;
-                    } else if (item.layer && item.layer.name) {
-                        safeName = item.layer.name;
-                    } else if (fallbackName) {
+                    } else if (fallbackName && fallbackName !== "") {
                         safeName = fallbackName;
+                    } else {
+                        if (item.typename === "PathItem") safeName = "Path";
+                        else if (item.typename === "GroupItem") safeName = "Group";
+                        else if (item.typename === "TextFrame") safeName = "Text Layer";
+                        else if (item.typename === "CompoundPathItem") safeName = "Compound Path";
+                        else if (item.typename === "PluginItem") safeName = "Live Shape";
+                        else safeName = "Shape";
                     }
 
                     if (item.typename === "PathItem") {
