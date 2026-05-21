@@ -18,18 +18,27 @@
         title.alignment = "center";
 
         var grpOptions = win.add("group");
-        grpOptions.add("statictext", undefined, "Mode:");
+        var modeTitle = grpOptions.add("statictext", undefined, "Mode:");
         var ddlMode = grpOptions.add("dropdownlist", undefined, [
             "Selection -> Separate Layers", 
-            "Selection -> Group by AI Layer", 
-            "Selection -> As Sequence", 
-            "All Layers -> As Sequences"
+            "Selection -> Group by AI Layer"
         ]);
         ddlMode.selection = 1;
 
         var btnExport = win.add("button", [0, 0, 150, 40], "Push to AE 📤");
         var statusText = win.add("statictext", undefined, "Ready.");
         statusText.alignment = "center";
+
+        // Estilizando a UI (Anarquizando o sistema!)
+        try {
+            var bgColor = win.graphics.newBrush(win.graphics.BrushType.SOLID_COLOR, [0.4, 0.15, 0.6, 1]); // Roxo vibrante
+            win.graphics.backgroundColor = bgColor;
+            
+            var whitePen = win.graphics.newPen(win.graphics.PenType.SOLID_COLOR, [1, 1, 1, 1], 1);
+            title.graphics.foregroundColor = whitePen;
+            modeTitle.graphics.foregroundColor = whitePen;
+            statusText.graphics.foregroundColor = whitePen;
+        } catch(e) {}
 
         // Main Logic when clicking the button
         btnExport.onClick = function () {
@@ -97,9 +106,26 @@
 
 
 
+                    var capVal = 1;
+                    try {
+                        if (pathItem.strokeCap == StrokeCap.ROUNDENDCAP) capVal = 2;
+                        else if (pathItem.strokeCap == StrokeCap.PROJECTINGENDCAP) capVal = 3;
+                    } catch (e) {}
+
+                    var joinVal = 1;
+                    try {
+                        if (pathItem.strokeJoin == StrokeJoin.ROUNDENDJOIN) joinVal = 2;
+                        else if (pathItem.strokeJoin == StrokeJoin.BEVELENDJOIN) joinVal = 3;
+                    } catch (e) {}
+
                     if (pathItem.filled && pathItem.fillColor) shapeData.fill = parseColor(pathItem.fillColor);
                     if (pathItem.stroked && pathItem.strokeColor) {
-                        shapeData.stroke = { color: parseColor(pathItem.strokeColor), width: pathItem.strokeWidth };
+                        shapeData.stroke = { 
+                            color: parseColor(pathItem.strokeColor), 
+                            width: pathItem.strokeWidth,
+                            cap: capVal,
+                            join: joinVal
+                        };
                     }
 
                     if (pathItem.pathPoints) {
@@ -204,23 +230,30 @@
                         pathData.name = safeName || "Path";
                         return pathData;
                     } else if (item.typename === "TextFrame") {
-                        var textData = {
-                            type: "text", name: safeName || "Text Layer", contents: item.contents,
-                            position: [item.position[0], -item.position[1]], fontFamily: "Arial", fontSize: 12, fillColor: [1, 1, 1], justification: 0
-                        };
-                        if (item.textRange && item.textRange.characterAttributes) {
-                            var chars = item.textRange.characterAttributes;
-                            try { textData.fontFamily = chars.textFont.name; } catch (e) { }
-                            try { textData.fontSize = chars.size; } catch (e) { }
-                            if (chars.fillColor) textData.fillColor = parseColor(chars.fillColor);
+                        try {
+                            var originalSelection = app.activeDocument.selection;
+                            app.activeDocument.selection = null;
+                            var dup = item.duplicate();
+                            var outlinedGroup = dup.createOutline();
+                            
+                            var pluginObj = { type: "group", name: safeName || "Text Layer", children: [] };
+                            
+                            if (outlinedGroup && outlinedGroup.typename === "GroupItem") {
+                                var childNode = processItem(outlinedGroup, safeName, depth + 1);
+                                if (childNode) {
+                                    pluginObj = childNode;
+                                    pluginObj.name = safeName || "Text Layer";
+                                }
+                                outlinedGroup.remove();
+                            } else {
+                                if (outlinedGroup) outlinedGroup.remove();
+                            }
+                            
+                            app.activeDocument.selection = originalSelection;
+                            return pluginObj;
+                        } catch (e) {
+                            return null;
                         }
-                        if (item.textRange && item.textRange.paragraphAttributes) {
-                            try {
-                                if (item.textRange.paragraphAttributes.justification == Justification.CENTER) textData.justification = 2;
-                                if (item.textRange.paragraphAttributes.justification == Justification.RIGHT) textData.justification = 1;
-                            } catch (e) { }
-                        }
-                        return textData;
                     } else if (item.typename === "CompoundPathItem") {
                         var compoundObj = { type: "compound", name: safeName || "Compound Path", children: [] };
                         for (var j = item.pathItems.length - 1; j >= 0; j--) {
@@ -230,9 +263,19 @@
                         return compoundObj;
                     } else if (item.typename === "GroupItem") {
                         var groupObj = { type: "group", name: safeName || "Group", children: [] };
+                        
+                        var isClipped = false;
+                        try { if (item.clipped) isClipped = true; } catch(e) {}
+                        groupObj.isClipped = isClipped;
+
                         for (var g = item.pageItems.length - 1; g >= 0; g--) {
                             var child = processItem(item.pageItems[g], safeName, depth + 1);
-                            if (child) groupObj.children.push(child);
+                            if (child) {
+                                if (isClipped && g === 0) {
+                                    child.isMask = true;
+                                }
+                                groupObj.children.push(child);
+                            }
                         }
                         return groupObj;
                     } else if (item.typename === "PluginItem") {
@@ -270,24 +313,6 @@
                         }
                     }
                     return null;
-                }
-
-                function gatherPaths(container) {
-                    var paths = [];
-                    for (var i = 0; i < container.pageItems.length; i++) {
-                        var item = container.pageItems[i];
-                        if (item.hidden || item.locked) continue;
-                        if (item.typename === "PathItem") {
-                            paths.push(item);
-                        } else if (item.typename === "CompoundPathItem") {
-                            for (var j = 0; j < item.pathItems.length; j++) {
-                                paths.push(item.pathItems[j]);
-                            }
-                        } else if (item.typename === "GroupItem") {
-                            paths = paths.concat(gatherPaths(item));
-                        }
-                    }
-                    return paths;
                 }
 
                 if (modeIndex === 0) {
@@ -338,101 +363,6 @@
 
                     for (var k = 0; k < orderedLayerNames.length; k++) {
                         exportData.shapes.push(groupsByLayer[orderedLayerNames[k]]);
-                    }
-                } else if (modeIndex === 2) {
-                    // 2: Selection as Sequence
-                    var selection = doc.selection;
-                    var frames = [];
-                    var firstFill = null, firstStroke = null;
-                    var cx = 0, cy = 0;
-
-                    for (var i = selection.length - 1; i >= 0; i--) {
-                        var selItem = selection[i];
-                        if (selItem.typename === "PathItem" || selItem.typename === "GroupItem") {
-                            var framePaths = [];
-                            if (selItem.typename === "PathItem") framePaths.push(selItem);
-                            else framePaths = gatherPaths(selItem);
-
-                            var extracted = [];
-                            for (var r = framePaths.length - 1; r >= 0; r--) {
-                                var pData = extractPathData(framePaths[r]);
-                                if (!firstFill && pData.fill) firstFill = pData.fill;
-                                if (!firstStroke && pData.stroke) firstStroke = pData.stroke;
-                                extracted.push({ vertices: pData.vertices, inTangents: pData.inTangents, outTangents: pData.outTangents, closed: pData.closed });
-                            }
-
-                            if (extracted.length > 0) {
-                                frames.push(extracted);
-                                if (frames.length === 1 && selItem.geometricBounds) {
-                                    var b = selItem.geometricBounds;
-                                    cx = (b[0] + b[2]) / 2;
-                                    cy = (b[1] + b[3]) / 2;
-                                }
-                            }
-                        }
-                    }
-
-                    if (frames.length > 0) {
-                        exportData.shapes.push({
-                            type: "path_sequence",
-                            name: "AnimSequence",
-                            frames: frames,
-                            fill: firstFill,
-                            stroke: firstStroke,
-                            cx: cx,
-                            cy: cy
-                        });
-                    }
-                } else if (modeIndex === 3) {
-                    // 3: Canvas (Layer Sequences)
-                    // Iterate from bottom layer to top layer
-                    for (var i = doc.layers.length - 1; i >= 0; i--) {
-                        var layer = doc.layers[i];
-                        if (!layer.visible || layer.locked) continue;
-
-                        var frames = [];
-                        var firstFill = null, firstStroke = null;
-                        var cx = 0, cy = 0;
-
-                        for (var j = layer.pageItems.length - 1; j >= 0; j--) {
-                            var rootItem = layer.pageItems[j];
-                            if (rootItem.hidden || rootItem.locked) continue;
-                            
-                            if (rootItem.typename === "PathItem" || rootItem.typename === "GroupItem") {
-                                var framePaths = [];
-                                if (rootItem.typename === "PathItem") framePaths.push(rootItem);
-                                else framePaths = gatherPaths(rootItem);
-
-                                var extracted = [];
-                                for (var r = framePaths.length - 1; r >= 0; r--) {
-                                    var pData = extractPathData(framePaths[r]);
-                                    if (!firstFill && pData.fill) firstFill = pData.fill;
-                                    if (!firstStroke && pData.stroke) firstStroke = pData.stroke;
-                                    extracted.push({ vertices: pData.vertices, inTangents: pData.inTangents, outTangents: pData.outTangents, closed: pData.closed });
-                                }
-
-                                if (extracted.length > 0) {
-                                    frames.push(extracted);
-                                    if (frames.length === 1 && rootItem.geometricBounds) {
-                                        var b = rootItem.geometricBounds;
-                                        cx = (b[0] + b[2]) / 2;
-                                        cy = (b[1] + b[3]) / 2;
-                                    }
-                                }
-                            }
-                        }
-
-                        if (frames.length > 0) {
-                            exportData.shapes.push({
-                                type: "path_sequence",
-                                name: layer.name,
-                                frames: frames,
-                                fill: firstFill,
-                                stroke: firstStroke,
-                                cx: cx,
-                                cy: cy
-                            });
-                        }
                     }
                 }
 

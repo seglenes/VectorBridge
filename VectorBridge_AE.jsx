@@ -19,6 +19,16 @@
         var statusText = win.add("statictext", undefined, "Ready.");
         statusText.alignment = "center";
 
+        // Estilizando a UI (Anarquizando o sistema!)
+        try {
+            var bgColor = win.graphics.newBrush(win.graphics.BrushType.SOLID_COLOR, [0.4, 0.15, 0.6, 1]); // Roxo vibrante
+            win.graphics.backgroundColor = bgColor;
+            
+            var whitePen = win.graphics.newPen(win.graphics.PenType.SOLID_COLOR, [1, 1, 1, 1], 1);
+            title.graphics.foregroundColor = whitePen;
+            statusText.graphics.foregroundColor = whitePen;
+        } catch(e) {}
+
         // Import Logic
         btnImport.onClick = function () {
             var comp = app.project.activeItem;
@@ -133,9 +143,7 @@
                 }
 
                 if (!skipAppearance && shapeData.stroke) {
-                    var strokeProp = pathGroupContents.addProperty("ADBE Vector Graphic - Stroke");
-                    strokeProp.property("ADBE Vector Stroke Color").setValue(shapeData.stroke.color);
-                    strokeProp.property("ADBE Vector Stroke Width").setValue(shapeData.stroke.width);
+                    applyStroke(shapeData.stroke, pathGroupContents);
                 }
 
                 if (!skipAppearance && shapeData.fill) {
@@ -144,31 +152,60 @@
                 }
             }
 
-            function traverseNode(nodeData, parentLayerOrGroup, refX, refY) {
+            function buildMask(maskData, parentGroup, refX, refY) {
+                if (maskData.type === "path" || maskData.type === "rect" || maskData.type === "ellipse") {
+                    buildPath(maskData, parentGroup, true, refX, refY);
+                } else if (maskData.type === "compound") {
+                    var compoundGroup = parentGroup.addProperty("ADBE Vector Group");
+                    compoundGroup.name = maskData.name + " (Mask)";
+                    var compoundContents = compoundGroup.property("ADBE Vectors Group");
+                    for (var cp = maskData.children.length - 1; cp >= 0; cp--) {
+                        if (maskData.children[cp].type === "path" || maskData.children[cp].type === "rect" || maskData.children[cp].type === "ellipse") {
+                            buildPath(maskData.children[cp], compoundContents, true, refX, refY);
+                        }
+                    }
+                    compoundContents.addProperty("ADBE Vector Filter - Merge");
+                }
+            }
+
+            function applyStroke(strokeData, targetContents) {
+                if (!strokeData) return;
+                var strokeProp = targetContents.addProperty("ADBE Vector Graphic - Stroke");
+                strokeProp.property("ADBE Vector Stroke Color").setValue(strokeData.color);
+                strokeProp.property("ADBE Vector Stroke Width").setValue(strokeData.width);
+                if (strokeData.cap !== undefined) {
+                    try { strokeProp.property("ADBE Vector Stroke Line Cap").setValue(strokeData.cap); } catch(e) {}
+                }
+                if (strokeData.join !== undefined) {
+                    try { strokeProp.property("ADBE Vector Stroke Line Join").setValue(strokeData.join); } catch(e) {}
+                }
+            }
+
+            function traverseNode(nodeData, parentLayerOrGroup, refX, refY, activeClipMask) {
                 var currentRefX = (nodeData.cx !== undefined) ? nodeData.cx : (refX !== undefined ? refX : aiCenterX);
                 var currentRefY = (nodeData.cy !== undefined) ? nodeData.cy : (refY !== undefined ? refY : aiCenterY);
 
-                if (nodeData.type === "text") {
-                    var textLayer = comp.layers.addText(nodeData.contents);
-                    if (targetLayer) textLayer.moveBefore(targetLayer);
-                    textLayer.name = nodeData.name;
-                    var textProp = textLayer.property("Source Text");
-                    var textDocument = textProp.value;
-                    textDocument.font = nodeData.fontFamily;
-                    textDocument.fontSize = nodeData.fontSize;
-                    textDocument.fillColor = nodeData.fillColor;
-                    textDocument.applyFill = true;
-                    textDocument.justification = nodeData.justification;
-                    textProp.setValue(textDocument);
-
-                    var tx = nodeData.position[0];
-                    var ty = nodeData.position[1];
-                    var absX = (cW / 2) + (tx - aiCenterX);
-                    var absY = (cH / 2) + (aiCenterY - ty);
-                    textLayer.property("Position").setValue([absX, absY]);
-                }
-                else if (nodeData.type === "group") {
+                if (nodeData.type === "group") {
                     var contents;
+                    var nextClipMask = activeClipMask;
+                    var contentChildren = nodeData.children;
+
+                    if (nodeData.isClipped) {
+                        var maskNode = null;
+                        var newChildren = [];
+                        for (var c = 0; c < nodeData.children.length; c++) {
+                            if (nodeData.children[c].isMask) {
+                                maskNode = nodeData.children[c];
+                            } else {
+                                newChildren.push(nodeData.children[c]);
+                            }
+                        }
+                        if (maskNode) {
+                            nextClipMask = maskNode;
+                            contentChildren = newChildren;
+                        }
+                    }
+
                     if (!parentLayerOrGroup) {
                         var shapeLayer = comp.layers.addShape();
                         if (targetLayer) shapeLayer.moveBefore(targetLayer);
@@ -183,12 +220,37 @@
                         contents = localGroup.property("ADBE Vectors Group");
                     }
 
-                    for (var c = nodeData.children.length - 1; c >= 0; c--) {
-                        var child = nodeData.children[c];
+                    for (var c = contentChildren.length - 1; c >= 0; c--) {
+                        var child = contentChildren[c];
                         if (child.type === "path" || child.type === "rect" || child.type === "ellipse") {
-                            buildPath(child, contents, false, currentRefX, currentRefY);
+                            if (nextClipMask) {
+                                var intGroup = contents.addProperty("ADBE Vector Group");
+                                intGroup.name = child.name + " (Masked)";
+                                var intContents = intGroup.property("ADBE Vectors Group");
+                                buildMask(nextClipMask, intContents, currentRefX, currentRefY);
+                                buildPath(child, intContents, true, currentRefX, currentRefY);
+                                var mergePaths = intContents.addProperty("ADBE Vector Filter - Merge");
+                                mergePaths.property("ADBE Vector Merge Type").setValue(4);
+                                if (child.stroke) {
+                                    applyStroke(child.stroke, intContents);
+                                }
+                                if (child.fill) {
+                                    var fillProp = intContents.addProperty("ADBE Vector Graphic - Fill");
+                                    fillProp.property("ADBE Vector Fill Color").setValue(child.fill);
+                                }
+                            } else {
+                                buildPath(child, contents, false, currentRefX, currentRefY);
+                            }
                         } else if (child.type === "compound") {
-                            var compoundGroup = contents.addProperty("ADBE Vector Group");
+                            var parentContentsForCompound = contents;
+                            if (nextClipMask) {
+                                var intGroup = contents.addProperty("ADBE Vector Group");
+                                intGroup.name = child.name + " (Masked)";
+                                parentContentsForCompound = intGroup.property("ADBE Vectors Group");
+                                buildMask(nextClipMask, parentContentsForCompound, currentRefX, currentRefY);
+                            }
+
+                            var compoundGroup = parentContentsForCompound.addProperty("ADBE Vector Group");
                             compoundGroup.name = child.name;
                             var compoundContents = compoundGroup.property("ADBE Vectors Group");
 
@@ -205,23 +267,31 @@
                             }
                             compoundContents.addProperty("ADBE Vector Filter - Merge");
 
-                            if (firstStroke) {
-                                var strokeProp = compoundContents.addProperty("ADBE Vector Graphic - Stroke");
-                                strokeProp.property("ADBE Vector Stroke Color").setValue(firstStroke.color);
-                                strokeProp.property("ADBE Vector Stroke Width").setValue(firstStroke.width);
-                            }
-
-                            if (firstFill) {
-                                var fillProp = compoundContents.addProperty("ADBE Vector Graphic - Fill");
-                                fillProp.property("ADBE Vector Fill Color").setValue(firstFill);
+                            if (nextClipMask) {
+                                var mergePaths = parentContentsForCompound.addProperty("ADBE Vector Filter - Merge");
+                                mergePaths.property("ADBE Vector Merge Type").setValue(4);
+                                if (firstStroke) {
+                                    applyStroke(firstStroke, parentContentsForCompound);
+                                }
+                                if (firstFill) {
+                                    var fillProp = parentContentsForCompound.addProperty("ADBE Vector Graphic - Fill");
+                                    fillProp.property("ADBE Vector Fill Color").setValue(firstFill);
+                                }
+                            } else {
+                                if (firstStroke) {
+                                    applyStroke(firstStroke, compoundContents);
+                                }
+                                if (firstFill) {
+                                    var fillProp = compoundContents.addProperty("ADBE Vector Graphic - Fill");
+                                    fillProp.property("ADBE Vector Fill Color").setValue(firstFill);
+                                }
                             }
                         } else {
-                            traverseNode(child, contents, currentRefX, currentRefY);
+                            traverseNode(child, contents, currentRefX, currentRefY, nextClipMask);
                         }
                     }
                 }
                 else if (nodeData.type === "compound") {
-                    // Stray compound path at root level 
                     var contents;
                     if (!parentLayerOrGroup) {
                         var shapeLayer = comp.layers.addShape();
@@ -235,6 +305,18 @@
                         var cGroup = parentLayerOrGroup.addProperty("ADBE Vector Group");
                         cGroup.name = nodeData.name;
                         contents = cGroup.property("ADBE Vectors Group");
+                    }
+
+                    var parentContentsForCompound = contents;
+                    if (activeClipMask) {
+                        var intGroup = contents.addProperty("ADBE Vector Group");
+                        intGroup.name = nodeData.name + " (Masked)";
+                        parentContentsForCompound = intGroup.property("ADBE Vectors Group");
+                        buildMask(activeClipMask, parentContentsForCompound, currentRefX, currentRefY);
+                        
+                        var compoundGroup = parentContentsForCompound.addProperty("ADBE Vector Group");
+                        compoundGroup.name = nodeData.name;
+                        contents = compoundGroup.property("ADBE Vectors Group");
                     }
 
                     var firstFill = null;
@@ -247,111 +329,25 @@
                         }
                     }
                     contents.addProperty("ADBE Vector Filter - Merge");
-                    if (firstStroke) {
-                        var sProp = contents.addProperty("ADBE Vector Graphic - Stroke");
-                        sProp.property("ADBE Vector Stroke Color").setValue(firstStroke.color);
-                        sProp.property("ADBE Vector Stroke Width").setValue(firstStroke.width);
-                    }
-                    if (firstFill) {
-                        var fProp = contents.addProperty("ADBE Vector Graphic - Fill");
-                        fProp.property("ADBE Vector Fill Color").setValue(firstFill);
-                    }
-                }
-                else if (nodeData.type === "path_sequence") {
-                    var contents;
-                    if (!parentLayerOrGroup) {
-                        var shapeLayer = comp.layers.addShape();
-                        if (targetLayer) shapeLayer.moveBefore(targetLayer);
-                        shapeLayer.name = nodeData.name;
-                        var absPosX = (cW / 2) + (currentRefX - aiCenterX);
-                        var absPosY = (cH / 2) + (aiCenterY - currentRefY);
-                        shapeLayer.property("Position").setValue([absPosX, absPosY]);
-                        contents = shapeLayer.property("ADBE Root Vectors Group");
+
+                    if (activeClipMask) {
+                        var mergePaths = parentContentsForCompound.addProperty("ADBE Vector Filter - Merge");
+                        mergePaths.property("ADBE Vector Merge Type").setValue(4);
+                        if (firstStroke) {
+                            applyStroke(firstStroke, parentContentsForCompound);
+                        }
+                        if (firstFill) {
+                            var fProp = parentContentsForCompound.addProperty("ADBE Vector Graphic - Fill");
+                            fProp.property("ADBE Vector Fill Color").setValue(firstFill);
+                        }
                     } else {
-                        var cGroup = parentLayerOrGroup.addProperty("ADBE Vector Group");
-                        cGroup.name = nodeData.name;
-                        contents = cGroup.property("ADBE Vectors Group");
-                    }
-
-                    var pathGroup = contents.addProperty("ADBE Vector Group");
-                    pathGroup.name = nodeData.name;
-                    var pathGroupContents = pathGroup.property("ADBE Vectors Group");
-
-                    try {
-                        var maxPaths = 0;
-                        for (var f = 0; f < nodeData.frames.length; f++) {
-                            if (nodeData.frames[f] && nodeData.frames[f].length > maxPaths) maxPaths = nodeData.frames[f].length;
+                        if (firstStroke) {
+                            applyStroke(firstStroke, contents);
                         }
-
-                        for (var p = 0; p < maxPaths; p++) {
-                            var pathProperty = pathGroupContents.addProperty("ADBE Vector Shape - Group");
-                            pathProperty.name = "Path " + (p + 1);
+                        if (firstFill) {
+                            var fProp = contents.addProperty("ADBE Vector Graphic - Fill");
+                            fProp.property("ADBE Vector Fill Color").setValue(firstFill);
                         }
-
-                        var keyTime = comp.time;
-                        var frameSpacing = comp.frameDuration * 2; // Animate on twos
-
-                        for (var f = 0; f < nodeData.frames.length; f++) {
-                            var framePaths = nodeData.frames[f];
-
-                            for (var p = 0; p < maxPaths; p++) {
-                                var shape = new Shape();
-                                if (p < framePaths.length) {
-                                    var frameData = framePaths[p];
-                                    var vertices = [], inTangents = [], outTangents = [];
-
-                                    for (var v = 0; v < frameData.vertices.length; v++) {
-                                        var pt = frameData.vertices[v];
-                                        var vx = pt[0] - currentRefX;
-                                        var vy = currentRefY - pt[1];
-                                        vertices.push([vx, vy]);
-                                        inTangents.push(frameData.inTangents && frameData.inTangents.length > v ? [frameData.inTangents[v][0], -frameData.inTangents[v][1]] : [0, 0]);
-                                        outTangents.push(frameData.outTangents && frameData.outTangents.length > v ? [frameData.outTangents[v][0], -frameData.outTangents[v][1]] : [0, 0]);
-                                    }
-
-                                    if (vertices.length === 0) {
-                                        vertices = [[0, 0], [0.1, 0.1]];
-                                        inTangents = [[0, 0], [0, 0]];
-                                        outTangents = [[0, 0], [0, 0]];
-                                    } else if (vertices.length === 1) {
-                                        vertices.push([vertices[0][0] + 0.1, vertices[0][1] + 0.1]);
-                                        inTangents.push([0, 0]);
-                                        outTangents.push([0, 0]);
-                                    }
-
-                                    shape.vertices = vertices;
-                                    shape.inTangents = inTangents;
-                                    shape.outTangents = outTangents;
-                                    shape.closed = frameData.closed;
-                                } else {
-                                    shape.vertices = [[0, 0], [0.1, 0.1]];
-                                    shape.inTangents = [[0, 0], [0, 0]];
-                                    shape.outTangents = [[0, 0], [0, 0]];
-                                    shape.closed = false;
-                                }
-
-                                pathGroupContents.property(p + 1).property("ADBE Vector Shape").setValueAtTime(keyTime, shape);
-                            }
-
-                            keyTime += frameSpacing;
-                        }
-
-                        if (nodeData.stroke) {
-                            var sProp = pathGroupContents.addProperty("ADBE Vector Graphic - Stroke");
-                            sProp.property("ADBE Vector Stroke Color").setValue(nodeData.stroke.color);
-                            sProp.property("ADBE Vector Stroke Width").setValue(nodeData.stroke.width);
-                        }
-                        if (nodeData.fill) {
-                            var fProp = pathGroupContents.addProperty("ADBE Vector Graphic - Fill");
-                            fProp.property("ADBE Vector Fill Color").setValue(nodeData.fill);
-                        }
-                        if (!nodeData.stroke && !nodeData.fill) {
-                            var sProp = pathGroupContents.addProperty("ADBE Vector Graphic - Stroke");
-                            sProp.property("ADBE Vector Stroke Color").setValue([0.9, 0.1, 0.1]);
-                            sProp.property("ADBE Vector Stroke Width").setValue(3);
-                        }
-                    } catch (err) {
-                        alert("CRITICAL ERROR in Sequence Builder!\nFrames: " + nodeData.frames.length + "\nMaxPaths: " + maxPaths + "\nError: " + err.toString() + "\nLine: " + err.line);
                     }
                 }
                 else if (nodeData.type === "path" || nodeData.type === "rect" || nodeData.type === "ellipse") {
@@ -362,15 +358,54 @@
                         var absPosX = (cW / 2) + (currentRefX - aiCenterX);
                         var absPosY = (cH / 2) + (aiCenterY - currentRefY);
                         shapeLayer.property("Position").setValue([absPosX, absPosY]);
-                        buildPath(nodeData, shapeLayer.property("ADBE Root Vectors Group"), false, currentRefX, currentRefY);
+                        
+                        if (activeClipMask) {
+                            var intGroup = shapeLayer.property("ADBE Root Vectors Group").addProperty("ADBE Vector Group");
+                            intGroup.name = nodeData.name + " (Masked)";
+                            var intContents = intGroup.property("ADBE Vectors Group");
+                            buildMask(activeClipMask, intContents, currentRefX, currentRefY);
+                            buildPath(nodeData, intContents, true, currentRefX, currentRefY);
+                            var mergePaths = intContents.addProperty("ADBE Vector Filter - Merge");
+                            mergePaths.property("ADBE Vector Merge Type").setValue(4);
+                            if (nodeData.stroke) {
+                                applyStroke(nodeData.stroke, intContents);
+                            }
+                            if (nodeData.fill) {
+                                var fillProp = intContents.addProperty("ADBE Vector Graphic - Fill");
+                                fillProp.property("ADBE Vector Fill Color").setValue(nodeData.fill);
+                            }
+                        } else {
+                            buildPath(nodeData, shapeLayer.property("ADBE Root Vectors Group"), false, currentRefX, currentRefY);
+                        }
                     } else {
-                        buildPath(nodeData, parentLayerOrGroup, false, currentRefX, currentRefY);
+                        if (activeClipMask) {
+                            var intGroup = parentLayerOrGroup.addProperty("ADBE Vector Group");
+                            intGroup.name = nodeData.name + " (Masked)";
+                            var intContents = intGroup.property("ADBE Vectors Group");
+                            buildMask(activeClipMask, intContents, currentRefX, currentRefY);
+                            buildPath(nodeData, intContents, true, currentRefX, currentRefY);
+                            var mergePaths = intContents.addProperty("ADBE Vector Filter - Merge");
+                            mergePaths.property("ADBE Vector Merge Type").setValue(4);
+                            if (nodeData.stroke) {
+                                applyStroke(nodeData.stroke, intContents);
+                            }
+                            if (nodeData.fill) {
+                                var fillProp = intContents.addProperty("ADBE Vector Graphic - Fill");
+                                fillProp.property("ADBE Vector Fill Color").setValue(nodeData.fill);
+                            }
+                        } else {
+                            buildPath(nodeData, parentLayerOrGroup, false, currentRefX, currentRefY);
+                        }
                     }
                 }
             }
 
             for (var i = 0; i < importedData.shapes.length; i++) {
-                traverseNode(importedData.shapes[i], null);
+                try {
+                    traverseNode(importedData.shapes[i], null);
+                } catch(e) {
+                    alert("Vector Bridge Error on shape '" + importedData.shapes[i].name + "': " + e.toString() + " (Line " + e.line + ")");
+                }
             }
 
             app.endUndoGroup();

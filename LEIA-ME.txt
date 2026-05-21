@@ -11,8 +11,8 @@ Novidades da V2.3
 1. Interface em Tempo Real
 Em vez de ir em File > Scripts o tempo todo, agora você tem Painéis nativos nos dois softwares.
 
-2. Live Text Support
-Se a sua seleção no Illustrator tiver um objeto de Texto, o After Effects construirá uma Text Layer real (injetando a fonte, cor, parágrafo e conteúdo), permitindo editar o texto e usar os Animators nativos do AE.
+2. Auto-Outlines para Textos
+Elementos de texto são convertidos automaticamente para vetores (outlines) de forma invisível durante a exportação. Eles chegam ao AE como Shape Layers agrupadas perfeitas, garantindo 100% de fidelidade visual sem quebra de fontes.
 
 3. Split Layers Inteligentes (Grupos Estruturais)
 Ao importar no AE, o script respeita o agrupamento do Illustrator.
@@ -27,9 +27,6 @@ O VectorBridge agora mapeia não o centro de um documento infinito, e sim a ânc
 
 6. Compound Paths (Pathfinder / Vazados)
 Elementos mesclados ou "furados" pelo Pathfinder do AI têm sua propriedade resgatada. O AE replica o comportamento de Clipping/Hole acionando um Merge Paths automático na propriedade raiz do grupo.
-
-7. Animação de Sequências Multi-Path
-O Vector Bridge suporta exportar grupos de arte independentes como sequências animadas ("Selection as Sequence" ou "Canvas as Sequence"). Você pode exportar arranjos complexos com múltiplos objetos e o script calculará os frames sincronizando todas as propriedades no After Effects.
 
 8. Formas Paramétricas e Live Shapes
 O motor quebra os Live Shapes nativos do Adobe invisivelmente e realiza uma auditoria matemática precisa. Se reconhecer Rectangles (Retângulos) e Ellipses (Círculos) puros, ele recria a forma nativamente no AE, dando a você controle absoluto de Roundness e Dimensões paramétricas.
